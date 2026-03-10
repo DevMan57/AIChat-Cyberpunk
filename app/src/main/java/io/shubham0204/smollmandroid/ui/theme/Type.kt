@@ -19,6 +19,8 @@ package io.shubham0204.smollmandroid.ui.theme
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.googlefonts.Font
+import androidx.compose.ui.text.googlefonts.GoogleFont
 import io.shubham0204.smollmandroid.R
 
 val bodyFontFamily =
@@ -53,6 +55,9 @@ val bodyFontFamily =
         ),
     )
 
+// Monospace font for cyberpunk theme (code/tech feel)
+val monospaceFontFamily = FontFamily.Monospace
+
 // Default Material 3 typography values
 val baseline = Typography()
 
@@ -73,4 +78,65 @@ val AppTypography =
         labelLarge = baseline.labelLarge.copy(fontFamily = bodyFontFamily),
         labelMedium = baseline.labelMedium.copy(fontFamily = bodyFontFamily),
         labelSmall = baseline.labelSmall.copy(fontFamily = bodyFontFamily),
+    )
+
+// Cyberpunk Typography with monospace accents for tech feel
+val CyberpunkTypography =
+    Typography(
+        // Display uses monospace for tech feel
+        displayLarge = baseline.displayLarge.copy(
+            fontFamily = monospaceFontFamily,
+            fontWeight = FontWeight.Bold
+        ),
+        displayMedium = baseline.displayMedium.copy(
+            fontFamily = monospaceFontFamily,
+            fontWeight = FontWeight.Bold
+        ),
+        displaySmall = baseline.displaySmall.copy(
+            fontFamily = monospaceFontFamily,
+            fontWeight = FontWeight.SemiBold
+        ),
+        // Headlines use monospace
+        headlineLarge = baseline.headlineLarge.copy(
+            fontFamily = monospaceFontFamily,
+            fontWeight = FontWeight.Bold
+        ),
+        headlineMedium = baseline.headlineMedium.copy(
+            fontFamily = monospaceFontFamily,
+            fontWeight = FontWeight.SemiBold
+        ),
+        headlineSmall = baseline.headlineSmall.copy(
+            fontFamily = monospaceFontFamily,
+            fontWeight = FontWeight.Medium
+        ),
+        // Titles use monospace
+        titleLarge = baseline.titleLarge.copy(
+            fontFamily = monospaceFontFamily,
+            fontWeight = FontWeight.SemiBold
+        ),
+        titleMedium = baseline.titleMedium.copy(
+            fontFamily = monospaceFontFamily,
+            fontWeight = FontWeight.Medium
+        ),
+        titleSmall = baseline.titleSmall.copy(
+            fontFamily = monospaceFontFamily,
+            fontWeight = FontWeight.Medium
+        ),
+        // Body uses regular font for readability
+        bodyLarge = baseline.bodyLarge.copy(fontFamily = bodyFontFamily),
+        bodyMedium = baseline.bodyMedium.copy(fontFamily = bodyFontFamily),
+        bodySmall = baseline.bodySmall.copy(fontFamily = bodyFontFamily),
+        // Labels use monospace for tech feel
+        labelLarge = baseline.labelLarge.copy(
+            fontFamily = monospaceFontFamily,
+            fontWeight = FontWeight.Medium
+        ),
+        labelMedium = baseline.labelMedium.copy(
+            fontFamily = monospaceFontFamily,
+            fontWeight = FontWeight.Medium
+        ),
+        labelSmall = baseline.labelSmall.copy(
+            fontFamily = monospaceFontFamily,
+            fontWeight = FontWeight.Medium
+        ),
     )

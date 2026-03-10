@@ -16,6 +16,7 @@
 
 package io.shubham0204.smollmandroid.ui.theme
 
+import android.content.Context
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -24,7 +25,14 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
+import io.shubham0204.smollmandroid.theme.CyberpunkDarkColorScheme
+import io.shubham0204.smollmandroid.theme.LocalCyberpunkTheme
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.runBlocking
+import org.koin.core.annotation.Single
 
 private val lightScheme =
     lightColorScheme(
@@ -104,22 +112,118 @@ private val darkScheme =
         surfaceContainerHighest = surfaceContainerHighestDark,
     )
 
+/**
+ * App Theme Modes
+ */
+enum class AppThemeMode {
+    LIGHT,
+    DARK,
+    SYSTEM,
+    CYBERPUNK
+}
+
+@Single
+class ThemeManager(context: Context) {
+    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    
+    private val _currentThemeMode = MutableStateFlow(loadThemeMode())
+    val currentThemeMode: StateFlow<AppThemeMode> = _currentThemeMode
+    
+    val isCyberpunk: Boolean
+        get() = _currentThemeMode.value == AppThemeMode.CYBERPUNK
+    
+    companion object {
+        private const val PREFS_NAME = "theme_prefs"
+        private const val KEY_THEME_MODE = "theme_mode"
+    }
+    
+    fun setThemeMode(mode: AppThemeMode) {
+        _currentThemeMode.value = mode
+        saveThemeMode(mode)
+    }
+    
+    fun cycleTheme() {
+        val nextMode = when (_currentThemeMode.value) {
+            AppThemeMode.LIGHT -> AppThemeMode.DARK
+            AppThemeMode.DARK -> AppThemeMode.CYBERPUNK
+            AppThemeMode.CYBERPUNK -> AppThemeMode.SYSTEM
+            AppThemeMode.SYSTEM -> AppThemeMode.LIGHT
+        }
+        setThemeMode(nextMode)
+    }
+    
+    fun toggleCyberpunk() {
+        val newMode = if (_currentThemeMode.value == AppThemeMode.CYBERPUNK) {
+            AppThemeMode.DARK
+        } else {
+            AppThemeMode.CYBERPUNK
+        }
+        setThemeMode(newMode)
+    }
+    
+    private fun loadThemeMode(): AppThemeMode {
+        val modeName = prefs.getString(KEY_THEME_MODE, AppThemeMode.CYBERPUNK.name)
+        return try {
+            AppThemeMode.valueOf(modeName!!)
+        } catch (e: Exception) {
+            AppThemeMode.CYBERPUNK
+        }
+    }
+    
+    private fun saveThemeMode(mode: AppThemeMode) {
+        prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
+    }
+}
+
 @Composable
 fun SmolLMAndroidTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    cyberpunkTheme: Boolean = true,
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = false,
     content: @Composable() () -> Unit,
 ) {
     val colorScheme =
         when {
+            cyberpunkTheme -> CyberpunkDarkColorScheme
             dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
                 val context = LocalContext.current
                 if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
             }
-
             darkTheme -> darkScheme
             else -> lightScheme
         }
-    MaterialTheme(colorScheme = colorScheme, content = content, typography = AppTypography)
+    
+    CompositionLocalProvider(
+        LocalCyberpunkTheme provides cyberpunkTheme
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            content = content,
+            typography = if (cyberpunkTheme) CyberpunkTypography else AppTypography
+        )
+    }
+}
+
+@Composable
+fun SmolLMAndroidTheme(
+    themeMode: AppThemeMode = AppThemeMode.CYBERPUNK,
+    dynamicColor: Boolean = false,
+    content: @Composable() () -> Unit,
+) {
+    val isDarkTheme = when (themeMode) {
+        AppThemeMode.LIGHT -> false
+        AppThemeMode.DARK -> true
+        AppThemeMode.SYSTEM -> isSystemInDarkTheme()
+        AppThemeMode.CYBERPUNK -> true
+    }
+    
+    val isCyberpunk = themeMode == AppThemeMode.CYBERPUNK
+    
+    SmolLMAndroidTheme(
+        darkTheme = isDarkTheme,
+        cyberpunkTheme = isCyberpunk,
+        dynamicColor = dynamicColor,
+        content = content
+    )
 }

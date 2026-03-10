@@ -9,6 +9,29 @@ set(GGML_DIR ${LLAMA_DIR}/ggml)
 set(COMMON_DIR ${LLAMA_DIR}/common)
 set(VENDOR_DIR ${LLAMA_DIR}/vendor)
 
+# Enable OpenCL GPU acceleration for Snapdragon 8 Gen 3
+# Find OpenCL library
+find_library(OPENCL_LIBRARY OpenCL PATHS 
+    ${ANDROID_NDK}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android
+    ${ANDROID_NDK}/platforms/android-26/arch-arm64/usr/lib
+)
+
+if(OPENCL_LIBRARY)
+    message(STATUS "OpenCL library found: ${OPENCL_LIBRARY}")
+    set(GGML_OPENCL ON)
+else()
+    message(STATUS "OpenCL library not found, using CPU only")
+    set(GGML_OPENCL OFF)
+endif()
+
+# Configure llama.cpp with OpenCL
+if(GGML_OPENCL)
+    target_compile_definitions(llama PRIVATE GGML_USE_CLBLAST)
+    target_compile_definitions(ggml PRIVATE GGML_USE_CLBLAST)
+    target_link_libraries(llama PRIVATE ${OPENCL_LIBRARY})
+    target_link_libraries(ggml PRIVATE ${OPENCL_LIBRARY})
+endif()
+
 # -fvisibility=hidden: hide all symbols by default
 # -fvisibility-inlines-hidden: hide all inline symbols by default
 target_compile_options(
@@ -64,10 +87,21 @@ function(build_library target_name)
             PUBLIC
             -ffunction-sections -fdata-sections
     )
-    target_link_libraries(
-            ${target_name}
-            android log llama common vulkan
-    )
+    
+    # Link libraries - include OpenCL if available
+    if(GGML_OPENCL)
+        target_link_libraries(
+                ${target_name}
+                android log llama common vulkan ${OPENCL_LIBRARY}
+        )
+        target_compile_definitions(${target_name} PRIVATE GGML_USE_CLBLAST)
+    else()
+        target_link_libraries(
+                ${target_name}
+                android log llama common vulkan
+        )
+    endif()
+    
     # -Wl,--gc-sections: remove unused sections (garbage collection)
     # -flto: link-time optimization
     # -Wl,--exclude-libs,ALL: exclude all libraries
@@ -95,6 +129,11 @@ function(build_library_arm64 target_name cpu_flags)
             PUBLIC
             -DGGML_USE_CPU -DGGML_USE_CPU_AARCH64 ${cpu_flags} -O3
     )
+    
+    # Add OpenCL defines if available
+    if(GGML_OPENCL)
+        target_compile_options(${target_name} PUBLIC -DGGML_USE_CLBLAST)
+    endif()
 endfunction()
 
 function(build_library_armv7a target_name cpu_flags fpu fpu_abi)
@@ -125,7 +164,7 @@ if (${ANDROID_ABI} STREQUAL "arm64-v8a")
     build_library_arm64("smollm_v8_2_fp16" "-march=armv8.2-a+fp16")
     build_library_arm64("smollm_v8_2_fp16_dotprod" "-march=armv8.2-a+fp16+dotprod")
 
-    # Targets for Arm-v8.4a
+    # Targets for Arm-v8.4a - optimized for Snapdragon 8 Gen 3
     build_library_arm64("smollm_v8_4_fp16_dotprod" "-march=armv8.4-a+fp16+dotprod")
     build_library_arm64("smollm_v8_4_fp16_dotprod_sve" "-march=armv8.4-a+fp16+dotprod+sve")
     build_library_arm64("smollm_v8_4_fp16_dotprod_i8mm" "-march=armv8.4-a+fp16+dotprod+i8mm")

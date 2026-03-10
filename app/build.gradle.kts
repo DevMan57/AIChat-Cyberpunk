@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.devtools.ksp")
+    id("com.chaquo.python") version "15.0.1"
     kotlin("plugin.serialization") version "2.1.0"
 }
 
@@ -15,10 +16,15 @@ android {
         applicationId = "io.shubham0204.smollmandroid"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
-        versionName = "14"
+        versionCode = 15
+        versionName = "15-ai-voice"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        // Chaquopy Python configuration
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     signingConfigs {
@@ -42,6 +48,9 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
         }
+        getByName("debug") {
+            isMinifyEnabled = false
+        }
     }
 
     compileOptions {
@@ -58,6 +67,9 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        jniLibs {
+            pickFirsts += listOf("lib/**/libc++_shared.so")
+        }
     }
     applicationVariants.configureEach {
         kotlin.sourceSets {
@@ -70,6 +82,24 @@ android {
         create("cleanedAnnotations")
         implementation {
             exclude(group = "org.jetbrains", module = "annotations")
+        }
+    }
+}
+
+// Chaquopy Python configuration
+chaquopy {
+    defaultConfig {
+        version = "3.10"
+        buildPython("/usr/bin/python3")
+        pip {
+            install("numpy==1.24.4")
+            install("wave")
+        }
+    }
+    productFlavors { }
+    sourceSets {
+        getByName("main") {
+            srcDir("src/main/python")
         }
     }
 }
@@ -124,7 +154,6 @@ dependencies {
     implementation("androidx.room:room-ktx:$roomVersion")
 
     // compose-icons: Feather icons pack
-    // https://github.com/DevSrSouza/compose-icons
     implementation(libs.composeIcons.feather)
 
     // Serialization for typed navigation routes
@@ -135,6 +164,12 @@ dependencies {
 
     // moonshine-ai for speech recognition
     implementation(libs.moonshine.voice)
+
+    // Audio recording and playback for voice cloning
+    implementation("androidx.media:media:1.7.0")
+    
+    // Chaquopy Python integration
+    implementation("com.chaquo.python.runtime:chaquopy-java:15.0.1")
 
     implementation("com.github.khushpanchal:Ketch:2.0.5")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

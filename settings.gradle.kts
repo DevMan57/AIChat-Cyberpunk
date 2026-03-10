@@ -2,7 +2,6 @@ import java.net.URI
 
 include(":smolvectordb")
 
-
 pluginManagement {
     repositories {
         google {
@@ -14,6 +13,8 @@ pluginManagement {
         }
         mavenCentral()
         gradlePluginPortal()
+        // Chaquopy plugin repository
+        maven { url = URI("https://chaquo.com/maven") }
     }
 }
 plugins {
@@ -26,10 +27,12 @@ dependencyResolutionManagement {
         mavenCentral()
         maven { url = URI("https://jitpack.io") }
         maven { url = URI("https://oss.sonatype.org/content/repositories/snapshots/") }
+        // Chaquopy repository
+        maven { url = URI("https://chaquo.com/maven") }
     }
 }
 
-rootProject.name = "SmolChat Android"
+rootProject.name = "AIChat Android"
 include(":app")
 include(":smollm")
 include(":hf-model-hub-api")

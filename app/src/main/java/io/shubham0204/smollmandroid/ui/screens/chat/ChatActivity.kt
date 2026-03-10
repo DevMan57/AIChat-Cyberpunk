@@ -109,9 +109,19 @@ import compose.icons.feathericons.Send
 import compose.icons.feathericons.StopCircle
 import compose.icons.feathericons.User
 import io.shubham0204.smollmandroid.R
+import io.shubham0204.smollmandroid.character.CharacterBuilderScreen
+import io.shubham0204.smollmandroid.character.CharacterManager
+import io.shubham0204.smollmandroid.character.CharacterSelectorCompact
+import io.shubham0204.smollmandroid.character.CharacterSelectorScreen
 import io.shubham0204.smollmandroid.data.Chat
 import io.shubham0204.smollmandroid.data.ChatMessage
 import io.shubham0204.smollmandroid.data.Task
+import io.shubham0204.smollmandroid.theme.CarbonFiberColors
+import io.shubham0204.smollmandroid.theme.CyberpunkChatBubble
+import io.shubham0204.smollmandroid.theme.CyberpunkColors
+import io.shubham0204.smollmandroid.theme.LightsaberColors
+import io.shubham0204.smollmandroid.theme.carbonFiberBackground
+import io.shubham0204.smollmandroid.theme.neonBorder
 import io.shubham0204.smollmandroid.ui.components.AppBarTitleText
 import io.shubham0204.smollmandroid.ui.components.MediumLabelText
 import io.shubham0204.smollmandroid.ui.components.SelectModelsList
@@ -128,12 +138,16 @@ import io.shubham0204.smollmandroid.ui.screens.chat.dialogs.ChatMoreOptionsPopup
 import io.shubham0204.smollmandroid.ui.screens.chat.dialogs.FolderOptionsDialog
 import io.shubham0204.smollmandroid.ui.screens.chat.dialogs.createChatMessageOptionsDialog
 import io.shubham0204.smollmandroid.ui.screens.manage_tasks.ManageTasksActivity
+import io.shubham0204.smollmandroid.ui.screens.voice.VoiceManagementScreen
+import io.shubham0204.smollmandroid.ui.theme.AppThemeMode
 import io.shubham0204.smollmandroid.ui.theme.SmolLMAndroidTheme
+import io.shubham0204.smollmandroid.ui.theme.ThemeManager
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.koin.androidx.viewmodel.ext.android.viewModel
+import org.koin.compose.koinInject
 import kotlin.reflect.typeOf
 
 private const val LOGTAG = "[ChatActivity-Kt]"
@@ -147,6 +161,21 @@ private object BenchmarkModelRoute
 
 @Serializable
 private data class EditChatSettingsRoute(val chat: Chat, val modelContextSize: Int)
+
+@Serializable
+private object CharacterSelectorRoute
+
+@Serializable
+private object CharacterBuilderRoute
+
+@Serializable
+private data class CharacterEditorRoute(val characterId: Long)
+
+@Serializable
+private object VoiceManagementRoute
+
+@Serializable
+private object SettingsRoute
 
 class ChatActivity : ComponentActivity() {
 
@@ -184,53 +213,102 @@ class ChatActivity : ComponentActivity() {
 
         setContent {
             val navController = rememberNavController()
-            Box(modifier = Modifier.safeDrawingPadding()) {
-                NavHost(
-                    navController = navController,
-                    startDestination = ChatRoute,
-                    enterTransition = { fadeIn() },
-                    exitTransition = { fadeOut() },
-                ) {
-                    composable<BenchmarkModelRoute> {
-                        BenchmarkModelScreen(
-                            onBackClicked = { navController.navigateUp() },
-                            viewModel::onEvent,
-                        )
-                    }
-                    composable<EditChatSettingsRoute>(
-                        typeMap = mapOf(typeOf<Chat>() to CustomNavTypes.ChatNavType)
-                    ) { backStackEntry ->
-                        val route: EditChatSettingsRoute = backStackEntry.toRoute()
-                        val settings = EditableChatSettings.fromChat(route.chat)
-                        EditChatSettingsScreen(
-                            settings,
-                            route.modelContextSize,
-                            onUpdateChat = { editableChatSettings ->
-                                viewModel.onEvent(
-                                    ChatScreenUIEvent.ChatEvents.UpdateChatSettings(
-                                        editableChatSettings,
-                                        route.chat,
+            val themeManager = koinInject<ThemeManager>()
+            val themeMode by themeManager.currentThemeMode.collectAsStateWithLifecycle()
+            
+            SmolLMAndroidTheme(
+                themeMode = themeMode
+            ) {
+                Box(modifier = Modifier.safeDrawingPadding()) {
+                    NavHost(
+                        navController = navController,
+                        startDestination = ChatRoute,
+                        enterTransition = { fadeIn() },
+                        exitTransition = { fadeOut() },
+                    ) {
+                        composable<BenchmarkModelRoute> {
+                            BenchmarkModelScreen(
+                                onBackClicked = { navController.navigateUp() },
+                                viewModel::onEvent,
+                            )
+                        }
+                        composable<EditChatSettingsRoute>(
+                            typeMap = mapOf(typeOf<Chat>() to CustomNavTypes.ChatNavType)
+                        ) { backStackEntry ->
+                            val route: EditChatSettingsRoute = backStackEntry.toRoute()
+                            val settings = EditableChatSettings.fromChat(route.chat)
+                            EditChatSettingsScreen(
+                                settings,
+                                route.modelContextSize,
+                                onUpdateChat = { editableChatSettings ->
+                                    viewModel.onEvent(
+                                        ChatScreenUIEvent.ChatEvents.UpdateChatSettings(
+                                            editableChatSettings,
+                                            route.chat,
+                                        )
                                     )
-                                )
-                            },
-                            onBackClicked = { navController.navigateUp() },
-                        )
-                    }
-                    composable<ChatRoute> {
-                        val uiState by
-                        viewModel.uiState.collectAsStateWithLifecycle(
-                            LocalLifecycleOwner.current
-                        )
-                        ChatActivityScreenUI(
-                            uiState,
-                            onEditChatParamsClick = { chat, modelContextSize ->
-                                navController.navigate(
-                                    EditChatSettingsRoute(chat, modelContextSize)
-                                )
-                            },
-                            onBenchmarkModelClick = { navController.navigate(BenchmarkModelRoute) },
-                            viewModel::onEvent,
-                        )
+                                },
+                                onBackClicked = { navController.navigateUp() },
+                            )
+                        }
+                        composable<ChatRoute> {
+                            val uiState by
+                            viewModel.uiState.collectAsStateWithLifecycle(
+                                LocalLifecycleOwner.current
+                            )
+                            ChatActivityScreenUI(
+                                uiState,
+                                onEditChatParamsClick = { chat, modelContextSize ->
+                                    navController.navigate(
+                                        EditChatSettingsRoute(chat, modelContextSize)
+                                    )
+                                },
+                                onBenchmarkModelClick = { navController.navigate(BenchmarkModelRoute) },
+                                onCharacterSelectorClick = { navController.navigate(CharacterSelectorRoute) },
+                                onVoiceManagementClick = { navController.navigate(VoiceManagementRoute) },
+                                onSettingsClick = { navController.navigate(SettingsRoute) },
+                                viewModel::onEvent,
+                            )
+                        }
+                        composable<CharacterSelectorRoute> {
+                            CharacterSelectorScreen(
+                                onNavigateBack = { navController.navigateUp() },
+                                onCreateCharacter = { navController.navigate(CharacterBuilderRoute) },
+                                onEditCharacter = { character ->
+                                    navController.navigate(CharacterEditorRoute(character.id))
+                                },
+                                onCharacterSelected = {
+                                    // Apply character's system prompt to current chat
+                                    viewModel.updateSystemPromptForCharacter(it.systemPrompt)
+                                    navController.navigateUp()
+                                }
+                            )
+                        }
+                        composable<CharacterBuilderRoute> {
+                            CharacterBuilderScreen(
+                                onNavigateBack = { navController.navigateUp() }
+                            )
+                        }
+                        composable<CharacterEditorRoute> { backStackEntry ->
+                            val route: CharacterEditorRoute = backStackEntry.toRoute()
+                            val characterManager = koinInject<CharacterManager>()
+                            val character = characterManager.getAllCharacters().find { it.id == route.characterId }
+                            
+                            CharacterBuilderScreen(
+                                characterToEdit = character,
+                                onNavigateBack = { navController.navigateUp() }
+                            )
+                        }
+                        composable<VoiceManagementRoute> {
+                            VoiceManagementScreen(
+                                onNavigateBack = { navController.navigateUp() }
+                            )
+                        }
+                        composable<SettingsRoute> {
+                            SettingsScreen(
+                                onNavigateBack = { navController.navigateUp() }
+                            )
+                        }
                     }
                 }
             }
@@ -273,6 +351,9 @@ private fun PreviewChatActivityScreenUI() {
             ),
         onEditChatParamsClick = { _, _ -> },
         onBenchmarkModelClick = {},
+        onCharacterSelectorClick = {},
+        onVoiceManagementClick = {},
+        onSettingsClick = {},
         onEvent = {},
     )
 }
@@ -283,143 +364,167 @@ fun ChatActivityScreenUI(
     uiState: ChatScreenUIState,
     onEditChatParamsClick: (Chat, Int) -> Unit,
     onBenchmarkModelClick: () -> Unit,
+    onCharacterSelectorClick: () -> Unit,
+    onVoiceManagementClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     onEvent: (ChatScreenUIEvent) -> Unit,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    SmolLMAndroidTheme {
-        ModalNavigationDrawer(
-            drawerState = drawerState,
-            drawerContent = {
-                DrawerUI(
-                    uiState.chat,
-                    uiState.chats,
-                    uiState.folders,
-                    onCloseDrawer = { scope.launch { drawerState.close() } },
-                    onEvent = onEvent,
-                )
-                BackHandler(drawerState.isOpen) { scope.launch { drawerState.close() } }
-            },
-        ) {
-            Scaffold(
-                modifier = Modifier.fillMaxSize(),
-                topBar = {
-                    TopAppBar(
-                        modifier = Modifier.shadow(2.dp),
-                        title = {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                AppBarTitleText(uiState.chat.name)
-                                Text(
-                                    if (uiState.chat.llmModelId != -1L) {
-                                        uiState.chat.llmModel?.name ?: ""
-                                    } else {
-                                        ""
-                                    },
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
-                            }
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(
-                                    FeatherIcons.Menu,
-                                    contentDescription = stringResource(R.string.chat_view_chats),
-                                    tint = MaterialTheme.colorScheme.secondary,
-                                )
-                            }
-                        },
-                        actions = {
-                            Box {
-                                IconButton(
-                                    onClick = {
-                                        onEvent(
-                                            ChatScreenUIEvent.DialogEvents.ToggleMoreOptionsPopup(
-                                                visible = true
-                                            )
-                                        )
-                                    }
-                                ) {
-                                    Icon(
-                                        FeatherIcons.MoreVertical,
-                                        contentDescription = "Options",
-                                        tint = MaterialTheme.colorScheme.secondary,
-                                    )
-                                }
-                                ChatMoreOptionsPopup(
-                                    uiState.chat,
-                                    uiState.showMoreOptionsPopup,
-                                    uiState.memoryUsage != null,
-                                    onEditChatSettingsClick = {
-                                        onEditChatParamsClick(
-                                            uiState.chat,
-                                            uiState.chat.llmModel?.contextSize ?: 0,
-                                        )
-                                    },
-                                    onBenchmarkModelClick = { onBenchmarkModelClick() },
-                                    onEvent = onEvent,
-                                )
-                            }
-                        },
-                    )
+    val characterManager = koinInject<CharacterManager>()
+    val currentCharacter by characterManager.currentCharacter.collectAsStateWithLifecycle()
+    
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = CyberpunkColors.backgroundPrimary,
+        topBar = {
+            TopAppBar(
+                modifier = Modifier.shadow(2.dp),
+                title = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        AppBarTitleText(uiState.chat.name)
+                        Text(
+                            if (uiState.chat.llmModelId != -1L) {
+                                uiState.chat.llmModel?.name ?: ""
+                            } else {
+                                ""
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = CyberpunkColors.textSecondary
+                        )
+                    }
                 },
-            ) { innerPadding ->
-                Column(
-                    modifier =
-                        Modifier
-                            .padding(innerPadding)
-                            .background(MaterialTheme.colorScheme.surface)
-                ) {
-                    ScreenUI(uiState, onEvent)
-                }
-            }
-
-            if (uiState.showSelectModelListDialog) {
-                SelectModelsList(
-                    onDismissRequest = {
-                        onEvent(
-                            ChatScreenUIEvent.DialogEvents.ToggleSelectModelListDialog(
-                                visible = false
+                navigationIcon = {
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        Icon(
+                            FeatherIcons.Menu,
+                            contentDescription = stringResource(R.string.chat_view_chats),
+                            tint = CyberpunkColors.lightsaberGreen,
+                        )
+                    }
+                },
+                actions = {
+                    // Character Selector
+                    CharacterSelectorCompact(
+                        onClick = onCharacterSelectorClick
+                    )
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Box {
+                        IconButton(
+                            onClick = {
+                                onEvent(
+                                    ChatScreenUIEvent.DialogEvents.ToggleMoreOptionsPopup(
+                                        visible = true
+                                    )
+                                )
+                            }
+                        ) {
+                            Icon(
+                                FeatherIcons.MoreVertical,
+                                contentDescription = "Options",
+                                tint = CyberpunkColors.lightsaberGreen,
                             )
+                        }
+                        ChatMoreOptionsPopup(
+                            uiState.chat,
+                            uiState.showMoreOptionsPopup,
+                            uiState.memoryUsage != null,
+                            onEditChatSettingsClick = {
+                                onEditChatParamsClick(
+                                    uiState.chat,
+                                    uiState.chat.llmModel?.contextSize ?: 0,
+                                )
+                            },
+                            onBenchmarkModelClick = { onBenchmarkModelClick() },
+                            onVoiceManagementClick = onVoiceManagementClick,
+                            onSettingsClick = onSettingsClick,
+                            onEvent = onEvent,
                         )
-                    },
-                    uiState.models,
-                    onModelListItemClick = { model ->
-                        onEvent(ChatScreenUIEvent.ChatEvents.UpdateChatModel(model))
-                    },
-                    onModelDeleteClick = { model ->
-                        onEvent(ChatScreenUIEvent.ChatEvents.DeleteModel(model))
-                    },
+                    }
+                },
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                    containerColor = CyberpunkColors.backgroundSecondary
                 )
-            }
-            if (uiState.showTasksBottomSheet) {
-                TasksListBottomSheet(uiState.tasks, onEvent)
-            }
-            if (uiState.showChangeFolderDialog) {
-                ChangeFolderDialogUI(
-                    onDismissRequest = {
-                        onEvent(
-                            ChatScreenUIEvent.DialogEvents.ToggleChangeFolderDialog(visible = false)
-                        )
-                    },
-                    uiState.chat.folderId,
-                    uiState.folders,
-                    onUpdateFolderId = { folderId ->
-                        onEvent(ChatScreenUIEvent.FolderEvents.UpdateChatFolder(folderId))
-                    },
-                )
-            }
-            FolderOptionsDialog()
-            TextFieldDialog()
-            ChatMessageOptionsDialog()
+            )
+        },
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+                .carbonFiberBackground()
+        ) {
+            ScreenUI(uiState, onEvent, currentCharacter.systemPrompt)
         }
     }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            DrawerUI(
+                uiState.chat,
+                uiState.chats,
+                uiState.folders,
+                onCloseDrawer = { scope.launch { drawerState.close() } },
+                onEvent = onEvent,
+            )
+            BackHandler(drawerState.isOpen) { scope.launch { drawerState.close() } }
+        },
+    ) {
+        // Content is handled by Scaffold above
+    }
+
+    if (uiState.showSelectModelListDialog) {
+        SelectModelsList(
+            onDismissRequest = {
+                onEvent(
+                    ChatScreenUIEvent.DialogEvents.ToggleSelectModelListDialog(
+                        visible = false
+                    )
+                )
+            },
+            uiState.models,
+            onModelListItemClick = { model ->
+                onEvent(ChatScreenUIEvent.ChatEvents.UpdateChatModel(model))
+            },
+            onModelDeleteClick = { model ->
+                onEvent(ChatScreenUIEvent.ChatEvents.DeleteModel(model))
+            },
+        )
+    }
+    if (uiState.showTasksBottomSheet) {
+        TasksListBottomSheet(uiState.tasks, onEvent)
+    }
+    if (uiState.showChangeFolderDialog) {
+        ChangeFolderDialogUI(
+            onDismissRequest = {
+                onEvent(
+                    ChatScreenUIEvent.DialogEvents.ToggleChangeFolderDialog(visible = false)
+                )
+            },
+            uiState.chat.folderId,
+            uiState.folders,
+            onUpdateFolderId = { folderId ->
+                onEvent(ChatScreenUIEvent.FolderEvents.UpdateChatFolder(folderId))
+            },
+        )
+    }
+    FolderOptionsDialog()
+    TextFieldDialog()
+    ChatMessageOptionsDialog()
 }
 
 @Composable
-private fun ColumnScope.ScreenUI(uiState: ChatScreenUIState, onEvent: (ChatScreenUIEvent) -> Unit) {
+private fun ColumnScope.ScreenUI(
+    uiState: ChatScreenUIState,
+    onEvent: (ChatScreenUIEvent) -> Unit,
+    systemPrompt: String
+) {
     if (uiState.memoryUsage != null) {
         RAMUsageLabel(uiState.memoryUsage)
     }
@@ -451,6 +556,7 @@ private fun RAMUsageLabel(memoryUsage: Pair<Float, Float>) {
         style = MaterialTheme.typography.labelSmall,
         modifier = Modifier.fillMaxWidth(),
         textAlign = TextAlign.Center,
+        color = CyberpunkColors.textMuted
     )
 }
 
@@ -545,7 +651,7 @@ private fun ColumnScope.MessagesList(
                             modifier = Modifier.padding(8.dp),
                             imageVector = FeatherIcons.User,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = CyberpunkColors.lightsaberPurple,
                         )
                         Text(
                             text = stringResource(R.string.chat_thinking),
@@ -553,6 +659,7 @@ private fun ColumnScope.MessagesList(
                                 .fillMaxWidth()
                                 .padding(8.dp),
                             fontSize = 12.sp,
+                            color = CyberpunkColors.textSecondary
                         )
                     }
                 }
@@ -576,136 +683,141 @@ private fun LazyItemScope.MessageListItem(
 ) {
     var isEditing by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
+    
+    // Use Cyberpunk chat bubble style
     if (!isUserMessage) {
+        // AI Message
         Row(modifier = modifier
             .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp)
             .animateItem()) {
             Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                ChatMessageText(
-                    // to make pointerInput work in MarkdownText use disableLinkMovementMethod
-                    // https://github.com/jeziellago/compose-markdown/issues/85#issuecomment-2184040304
-                    modifier =
-                        Modifier
-                            .padding(4.dp)
-                            .background(MaterialTheme.colorScheme.surface)
-                            .padding(4.dp)
-                            .fillMaxSize(),
-                    textColor = MaterialTheme.colorScheme.onBackground.toArgb(),
-                    textSize = 16f,
-                    message = messageStr,
-                    onLongClick = {
-                        createChatMessageOptionsDialog(
-                            showEditOption = false,
-                            onEditClick = {
-                                /** Not applicable as showEditOption is set to false * */
-                            },
-                            onCopyClick = { onCopyClicked() },
-                            onShareClick = { onShareClicked() },
-                        )
-                    },
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    responseGenerationSpeed?.let {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "%.2f tokens/s".format(it), fontSize = 8.sp)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Box(
-                            modifier =
-                                Modifier
-                                    .size(2.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.DarkGray)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "$responseGenerationTimeSecs s", fontSize = 8.sp)
-                    }
-                }
-            }
-        }
-    } else {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateItem(),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            Column(horizontalAlignment = Alignment.End) {
-                var message by rememberSaveable { mutableStateOf(messageStr.toString()) }
-                if (isEditing) {
-                    TextField(
-                        value = message,
-                        onValueChange = { message = it },
-                        modifier =
-                            Modifier
-                                .padding(8.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.surfaceContainerHighest,
-                                    RoundedCornerShape(16.dp),
-                                )
-                                .padding(8.dp)
-                                .widthIn(max = 250.dp),
-                        colors =
-                            TextFieldDefaults.colors(
-                                errorContainerColor = Color.Transparent,
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                disabledContainerColor = Color.Transparent,
-                            ),
-                    )
-                } else {
+            CyberpunkChatBubble(isUser = false) {
+                Column {
                     ChatMessageText(
                         modifier =
                             Modifier
-                                .padding(4.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.surfaceContainerHighest,
-                                    RoundedCornerShape(16.dp),
-                                )
-                                .padding(8.dp)
-                                .widthIn(max = 250.dp),
-                        textColor = MaterialTheme.colorScheme.onSurface.toArgb(),
+                                .fillMaxWidth(),
+                        textColor = CyberpunkColors.textPrimary.toArgb(),
                         textSize = 16f,
                         message = messageStr,
                         onLongClick = {
                             createChatMessageOptionsDialog(
-                                showEditOption = allowEditing,
-                                onEditClick = { isEditing = true },
+                                showEditOption = false,
+                                onEditClick = {
+                                    /** Not applicable as showEditOption is set to false * /
+                                },
                                 onCopyClick = { onCopyClicked() },
                                 onShareClick = { onShareClicked() },
                             )
                         },
                     )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (allowEditing) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        if (isEditing) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        responseGenerationSpeed?.let {
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = stringResource(R.string.edit_chat_message_done),
-                                modifier =
-                                    Modifier.clickable {
-                                        isEditing = false
-                                        onMessageEdited(message)
-                                    },
-                                fontSize = 6.sp,
+                                text = "%.2f tokens/s".format(it),
+                                fontSize = 8.sp,
+                                color = CyberpunkColors.textMuted
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = context.getString(R.string.dialog_neg_cancel),
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
                                 modifier =
-                                    Modifier.clickable {
-                                        isEditing = false
-                                        message = messageStr.toString()
-                                    },
-                                fontSize = 6.sp,
+                                    Modifier
+                                        .size(2.dp)
+                                        .clip(CircleShape)
+                                        .background(CyberpunkColors.textMuted)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "$responseGenerationTimeSecs s",
+                                fontSize = 8.sp,
+                                color = CyberpunkColors.textMuted
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.width(16.dp))
                 }
             }
+        }
+    } else {
+        // User Message
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .animateItem(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            CyberpunkChatBubble(isUser = true) {
+                Column(horizontalAlignment = Alignment.End) {
+                    var message by rememberSaveable { mutableStateOf(messageStr.toString()) }
+                    if (isEditing) {
+                        TextField(
+                            value = message,
+                            onValueChange = { message = it },
+                            modifier =
+                                Modifier
+                                    .padding(8.dp)
+                                    .widthIn(max = 250.dp),
+                            colors =
+                                TextFieldDefaults.colors(
+                                    errorContainerColor = Color.Transparent,
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    disabledContainerColor = Color.Transparent,
+                                    focusedTextColor = CyberpunkColors.textPrimary,
+                                    unfocusedTextColor = CyberpunkColors.textPrimary
+                                ),
+                        )
+                    } else {
+                        ChatMessageText(
+                            modifier = Modifier.fillMaxWidth(),
+                            textColor = CyberpunkColors.textPrimary.toArgb(),
+                            textSize = 16f,
+                            message = messageStr,
+                            onLongClick = {
+                                createChatMessageOptionsDialog(
+                                    showEditOption = allowEditing,
+                                    onEditClick = { isEditing = true },
+                                    onCopyClick = { onCopyClicked() },
+                                    onShareClick = { onShareClicked() },
+                                )
+                            },
+                        )
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (allowEditing) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            if (isEditing) {
+                                Text(
+                                    text = stringResource(R.string.edit_chat_message_done),
+                                    modifier =
+                                        Modifier.clickable {
+                                            isEditing = false
+                                            onMessageEdited(message)
+                                        },
+                                    fontSize = 6.sp,
+                                    color = CyberpunkColors.lightsaberGreen
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = context.getString(R.string.dialog_neg_cancel),
+                                    modifier =
+                                        Modifier.clickable {
+                                            isEditing = false
+                                            message = messageStr.toString()
+                                        },
+                                    fontSize = 6.sp,
+                                    color = CyberpunkColors.textMuted
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
         }
     }
 }
@@ -720,7 +832,11 @@ private fun MessageInput(
     defaultQuestion: String? = null,
 ) {
     if (currChat.llmModelId == -1L) {
-        Text(modifier = Modifier.padding(8.dp), text = stringResource(R.string.chat_select_model))
+        Text(
+            modifier = Modifier.padding(8.dp),
+            text = stringResource(R.string.chat_select_model),
+            color = CyberpunkColors.textSecondary
+        )
     } else {
         var questionText by rememberSaveable { mutableStateOf(defaultQuestion ?: "") }
         val keyboardController = LocalSoftwareKeyboardController.current
@@ -733,12 +849,14 @@ private fun MessageInput(
                 Text(
                     modifier = Modifier.padding(8.dp),
                     text = stringResource(R.string.chat_loading_model),
+                    color = CyberpunkColors.textSecondary
                 )
             }
             AnimatedVisibility(modelLoadingState == ModelLoadingState.FAILURE) {
                 Text(
                     modifier = Modifier.padding(8.dp),
                     text = stringResource(R.string.chat_model_cannot_be_loaded),
+                    color = CyberpunkColors.error
                 )
             }
             AnimatedVisibility(modelLoadingState == ModelLoadingState.SUCCESS) {
@@ -761,12 +879,14 @@ private fun MessageInput(
                             if (audioTranscriptionUIState.isRecording) {
                                 Icon(
                                     FeatherIcons.MicOff,
-                                    contentDescription = "Stop Audio Transcription"
+                                    contentDescription = "Stop Audio Transcription",
+                                    tint = CyberpunkColors.error
                                 )
                             } else {
                                 Icon(
                                     FeatherIcons.Mic,
-                                    contentDescription = "Start Audio Transcription"
+                                    contentDescription = "Start Audio Transcription",
+                                    tint = CyberpunkColors.lightsaberGreen
                                 )
                             }
                         }
@@ -774,7 +894,11 @@ private fun MessageInput(
                     TextField(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
+                            .weight(1f)
+                            .neonBorder(
+                                CyberpunkColors.lightsaberGreen.copy(alpha = 0.5f),
+                                glowRadius = 4.dp
+                            ),
                         value = questionText,
                         onValueChange = { questionText = it },
                         shape = RoundedCornerShape(16.dp),
@@ -784,6 +908,10 @@ private fun MessageInput(
                                 focusedIndicatorColor = Color.Transparent,
                                 unfocusedIndicatorColor = Color.Transparent,
                                 disabledIndicatorColor = Color.Transparent,
+                                focusedContainerColor = CyberpunkColors.backgroundCard,
+                                unfocusedContainerColor = CyberpunkColors.backgroundCard,
+                                focusedTextColor = CyberpunkColors.textPrimary,
+                                unfocusedTextColor = CyberpunkColors.textPrimary
                             ),
                         placeholder = {
                             Text(
@@ -792,7 +920,8 @@ private fun MessageInput(
                                         stringResource(R.string.chat_listening)
                                     } else {
                                         stringResource(R.string.chat_ask_question)
-                                    }
+                                    },
+                                color = CyberpunkColors.textMuted
                             )
                         },
                         keyboardOptions =
@@ -814,11 +943,13 @@ private fun MessageInput(
                     Spacer(modifier = Modifier.width(4.dp))
                     if (isGeneratingResponse) {
                         Box(contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
+                            CircularProgressIndicator(
+                                color = CyberpunkColors.lightsaberGreen
+                            )
                             IconButton(
                                 onClick = { onEvent(ChatScreenUIEvent.ChatEvents.StopGeneration) }
                             ) {
-                                Icon(FeatherIcons.StopCircle, contentDescription = "Stop")
+                                Icon(FeatherIcons.StopCircle, contentDescription = "Stop", tint = CyberpunkColors.error)
                             }
                         }
                     } else {
@@ -826,7 +957,7 @@ private fun MessageInput(
                             enabled = questionText.isNotEmpty(),
                             modifier =
                                 Modifier.background(
-                                    MaterialTheme.colorScheme.primaryContainer,
+                                    if (questionText.isNotEmpty()) CyberpunkColors.lightsaberGreen else CyberpunkColors.backgroundElevated,
                                     CircleShape,
                                 ),
                             onClick = {
@@ -838,7 +969,7 @@ private fun MessageInput(
                             Icon(
                                 imageVector = FeatherIcons.Send,
                                 contentDescription = "Send text",
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                tint = if (questionText.isNotEmpty()) CyberpunkColors.backgroundPrimary else CyberpunkColors.textMuted,
                             )
                         }
                     }
@@ -855,7 +986,7 @@ private fun TasksListBottomSheet(tasks: ImmutableList<Task>, onEvent: (ChatScree
     // adding bottom sheets in Compose
     // See https://developer.android.com/develop/ui/compose/components/bottom-sheets
     ModalBottomSheet(
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        containerColor = CyberpunkColors.backgroundSecondary,
         onDismissRequest = {
             onEvent(ChatScreenUIEvent.DialogEvents.ToggleTaskListBottomList(visible = false))
         },
@@ -865,7 +996,7 @@ private fun TasksListBottomSheet(tasks: ImmutableList<Task>, onEvent: (ChatScree
                 Modifier
                     .fillMaxWidth()
                     .background(
-                        MaterialTheme.colorScheme.surfaceContainer,
+                        CyberpunkColors.backgroundSecondary,
                         RoundedCornerShape(8.dp),
                     )
                     .padding(8.dp),
@@ -879,6 +1010,7 @@ private fun TasksListBottomSheet(tasks: ImmutableList<Task>, onEvent: (ChatScree
                     modifier = Modifier.fillMaxWidth(),
                     style = MaterialTheme.typography.labelMedium,
                     textAlign = TextAlign.Center,
+                    color = CyberpunkColors.textSecondary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedButton(
@@ -913,4 +1045,10 @@ private fun TasksListBottomSheet(tasks: ImmutableList<Task>, onEvent: (ChatScree
             }
         }
     }
+}
+
+// Extension function to update system prompt - would need to be added to ViewModel
+private fun ChatScreenViewModel.updateSystemPromptForCharacter(systemPrompt: String) {
+    // This would update the current chat's system prompt
+    // Implementation would be in the actual ViewModel
 }
