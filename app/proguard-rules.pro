@@ -19,3 +19,6 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Sherpa ONNX - keep JNI classes used by native code
+-keep class com.k2fsa.sherpa.onnx.** { *; }

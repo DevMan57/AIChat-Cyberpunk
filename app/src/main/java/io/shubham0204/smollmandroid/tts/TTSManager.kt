@@ -21,9 +21,10 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.util.Log
-import com.chaquo.python.PyObject
-import com.chaquo.python.Python
-import com.chaquo.python.android.AndroidPlatform
+import com.k2fsa.sherpa.onnx.OfflineTts
+import com.k2fsa.sherpa.onnx.OfflineTtsConfig
+import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
+import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 import io.shubham0204.smollmandroid.voice.WavUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,23 +32,25 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
- * Text-to-Speech Manager using Chaquopy Python bridge
- * Integrates with Pocket TTS / Sherpa ONNX for local TTS
+ * Text-to-Speech Manager using Sherpa ONNX directly (no Python bridge).
+ * Uses Kyutai Pocket TTS ONNX model for fast on-device synthesis.
  */
 class TTSManager(private val context: Context) {
 
     companion object {
         private const val TAG = "TTSManager"
-        private const val SAMPLE_RATE = 24000
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_OUT_MONO
         private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
     }
 
-    private var ttsModule: PyObject? = null
-    private var ttsService: PyObject? = null
+    private var tts: OfflineTts? = null
+    private var sampleRate: Int = 24000
     private var audioTrack: AudioTrack? = null
+    @Volatile
     private var isPlaying = false
 
     private val _isReady = MutableStateFlow(false)
@@ -57,75 +60,87 @@ class TTSManager(private val context: Context) {
     val isSpeaking: StateFlow<Boolean> = _isSpeaking
 
     init {
-        initializePython()
+        initializeTTS()
     }
 
-    private fun initializePython() {
+    private fun initializeTTS() {
         try {
-            if (!Python.isStarted()) {
-                Python.start(AndroidPlatform(context))
+            val modelDir = File(context.filesDir, "tts_models")
+            modelDir.mkdirs()
+
+            val modelFile = File(modelDir, "model.onnx")
+            val tokensFile = File(modelDir, "tokens.txt")
+
+            if (!modelFile.exists() || !tokensFile.exists()) {
+                Log.w(TAG, "TTS model files not found in ${modelDir.absolutePath}")
+                _isReady.value = false
+                return
             }
-            val python = Python.getInstance()
 
-            ttsModule = python.getModule("tts_service")
-            val modelDir = File(context.filesDir, "tts_models").absolutePath
-            File(modelDir).mkdirs()
+            // Detect espeak-ng data dir (used by VITS models)
+            val espeakDataDir = File(modelDir, "espeak-ng-data")
 
-            ttsService = ttsModule?.callAttr("create_tts_service", modelDir)
+            val vitsConfig = OfflineTtsVitsModelConfig(
+                model = modelFile.absolutePath,
+                tokens = tokensFile.absolutePath,
+                dataDir = if (espeakDataDir.exists()) espeakDataDir.absolutePath else "",
+                noiseScale = 0.667f,
+                noiseScaleW = 0.8f,
+                lengthScale = 1.0f,
+            )
 
-            _isReady.value = ttsService != null
-            Log.d(TAG, "Python TTS initialized: ${_isReady.value}")
+            val modelConfig = OfflineTtsModelConfig(
+                vits = vitsConfig,
+                // Use efficient thread count for Snapdragon 8 Gen 3
+                numThreads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
+                debug = false,
+            )
+
+            val ttsConfig = OfflineTtsConfig(
+                model = modelConfig,
+            )
+
+            tts = OfflineTts(config = ttsConfig)
+            sampleRate = tts?.sampleRate() ?: 24000
+
+            _isReady.value = true
+            Log.d(TAG, "Sherpa ONNX TTS initialized (sampleRate=$sampleRate)")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize Python TTS", e)
+            Log.e(TAG, "Failed to initialize Sherpa ONNX TTS", e)
             _isReady.value = false
         }
     }
 
-    suspend fun speak(text: String, speed: Float = 1.0f) = withContext(Dispatchers.IO) {
-        val module = ttsModule ?: return@withContext
-        val service = ttsService ?: return@withContext
+    suspend fun speak(text: String, speakerId: Int = 0, speed: Float = 1.0f) = withContext(Dispatchers.IO) {
+        val engine = tts ?: return@withContext
         if (text.isBlank()) return@withContext
 
         try {
             _isSpeaking.value = true
 
-            val audioBytes = module.callAttr(
-                "synthesize_text",
-                service,
-                text,
-                0,
-                speed
-            )?.toJava(ByteArray::class.java)
+            val audio = engine.generate(text = text, sid = speakerId, speed = speed)
+            val pcmBytes = floatSamplesToPcm16(audio.samples)
 
-            if (audioBytes != null && audioBytes.isNotEmpty()) {
-                playAudio(audioBytes)
-            } else {
-                speakWithSystemTTS(text)
+            if (pcmBytes.isNotEmpty()) {
+                playAudio(pcmBytes, audio.sampleRate)
             }
         } catch (e: Exception) {
             Log.e(TAG, "TTS synthesis failed", e)
-            speakWithSystemTTS(text)
         } finally {
             _isSpeaking.value = false
         }
     }
 
-    suspend fun synthesizeToFile(text: String, outputFile: File, speed: Float = 1.0f): Boolean =
+    suspend fun synthesizeToFile(text: String, outputFile: File, speakerId: Int = 0, speed: Float = 1.0f): Boolean =
         withContext(Dispatchers.IO) {
             try {
-                val module = ttsModule ?: return@withContext false
-                val service = ttsService ?: return@withContext false
+                val engine = tts ?: return@withContext false
 
-                val audioBytes = module.callAttr(
-                    "synthesize_text",
-                    service,
-                    text,
-                    0,
-                    speed
-                )?.toJava(ByteArray::class.java)
+                val audio = engine.generate(text = text, sid = speakerId, speed = speed)
+                val pcmBytes = floatSamplesToPcm16(audio.samples)
 
-                if (audioBytes != null && audioBytes.isNotEmpty()) {
-                    val wavData = WavUtils.createWavFile(audioBytes, SAMPLE_RATE, 1, 16)
+                if (pcmBytes.isNotEmpty()) {
+                    val wavData = WavUtils.createWavFile(pcmBytes, audio.sampleRate, 1, 16)
                     FileOutputStream(outputFile).use { it.write(wavData) }
                     return@withContext true
                 }
@@ -135,12 +150,26 @@ class TTSManager(private val context: Context) {
             return@withContext false
         }
 
-    private fun playAudio(audioBytes: ByteArray) {
+    /**
+     * Convert float samples [-1.0, 1.0] to PCM 16-bit byte array.
+     */
+    private fun floatSamplesToPcm16(samples: FloatArray): ByteArray {
+        val buffer = ByteBuffer.allocate(samples.size * 2)
+        buffer.order(ByteOrder.LITTLE_ENDIAN)
+        for (sample in samples) {
+            val clamped = sample.coerceIn(-1.0f, 1.0f)
+            val pcm16 = (clamped * 32767.0f).toInt().toShort()
+            buffer.putShort(pcm16)
+        }
+        return buffer.array()
+    }
+
+    private fun playAudio(audioBytes: ByteArray, rate: Int = sampleRate) {
         try {
             stopAudio()
 
             val minBufferSize = AudioTrack.getMinBufferSize(
-                SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT
+                rate, CHANNEL_CONFIG, AUDIO_FORMAT
             )
 
             audioTrack = AudioTrack.Builder()
@@ -152,7 +181,7 @@ class TTSManager(private val context: Context) {
                 )
                 .setAudioFormat(
                     AudioFormat.Builder()
-                        .setSampleRate(SAMPLE_RATE)
+                        .setSampleRate(rate)
                         .setEncoding(AUDIO_FORMAT)
                         .setChannelMask(CHANNEL_CONFIG)
                         .build()
@@ -169,14 +198,6 @@ class TTSManager(private val context: Context) {
         }
     }
 
-    private suspend fun speakWithSystemTTS(text: String) = withContext(Dispatchers.Main) {
-        try {
-            Log.d(TAG, "System TTS fallback: $text")
-        } catch (e: Exception) {
-            Log.e(TAG, "System TTS failed", e)
-        }
-    }
-
     fun stopAudio() {
         try {
             audioTrack?.stop()
@@ -190,7 +211,7 @@ class TTSManager(private val context: Context) {
 
     fun release() {
         stopAudio()
-        ttsService = null
-        ttsModule = null
+        tts?.release()
+        tts = null
     }
 }
