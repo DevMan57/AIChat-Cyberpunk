@@ -148,8 +148,8 @@ dependencies {
     // Audio recording and playback for voice cloning
     implementation("androidx.media:media:1.7.0")
     
-    // Sherpa ONNX for on-device TTS (replaces Chaquopy Python bridge)
-    implementation("com.k2fsa.sherpa:onnx-android:1.10.30")
+    // ONNX Runtime for on-device TTS (PocketTTS engine)
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.21.0")
 
     implementation("com.github.khushpanchal:Ketch:2.0.5")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

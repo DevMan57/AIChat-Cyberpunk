@@ -16,7 +16,6 @@
 
 package io.shubham0204.smollmandroid.ui.screens.chat
 
-import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -55,13 +54,14 @@ fun ChatTTSController(
     var autoSpeakEnabled by remember { mutableStateOf(false) }
     var showTTSSettings by remember { mutableStateOf(false) }
     
-    // Auto-speak latest assistant message
+    // Auto-speak latest assistant message with voice cloning support
     LaunchedEffect(messages.size, isGeneratingResponse) {
         if (autoSpeakEnabled && !isGeneratingResponse && messages.isNotEmpty()) {
             val lastMessage = messages.last()
             if (!lastMessage.isUserMessage) {
                 scope.launch {
-                    ttsManager.speak(lastMessage.message)
+                    val voiceFile = voiceCloningManager.getVoiceProfileFile()
+                    ttsManager.speak(lastMessage.message, voiceFile = voiceFile)
                 }
             }
         }
@@ -224,7 +224,24 @@ private fun TTSSettingsDialog(
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
+                // Manage TTS Models button
+                OutlinedButton(
+                    onClick = {
+                        onDismiss()
+                        val intent = android.content.Intent(
+                            context,
+                            io.shubham0204.smollmandroid.ui.screens.manage_tts.ManageTTSActivity::class.java
+                        )
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Manage TTS Models")
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 // Instructions
                 Text(
                     text = "Voice cloning requires 5-10 seconds of clear speech. " +

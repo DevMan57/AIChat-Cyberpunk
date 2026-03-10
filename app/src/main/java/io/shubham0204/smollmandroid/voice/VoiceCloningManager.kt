@@ -34,7 +34,7 @@ import java.nio.ByteOrder
  * Voice Cloning Manager
  * Handles voice recording and stores reference audio for voice cloning.
  * Voice profiles are stored as WAV files that can be used by TTS models
- * with speaker embedding support (e.g. multi-speaker VITS via Sherpa ONNX).
+ * with speaker embedding support (e.g. PocketTTS with mimi_encoder voice cloning).
  */
 class VoiceCloningManager(private val context: Context) {
 
