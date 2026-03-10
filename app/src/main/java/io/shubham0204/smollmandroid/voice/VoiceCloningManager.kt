@@ -48,6 +48,7 @@ class VoiceCloningManager(private val context: Context) {
     
     private var audioRecord: AudioRecord? = null
     private var recordingThread: Thread? = null
+    @Volatile
     private var isRecording = false
     private var recordingStartTime: Long = 0
     
@@ -158,49 +159,45 @@ class VoiceCloningManager(private val context: Context) {
     }
     
     private fun recordAudio(bufferSize: Int) {
-        val audioData = mutableListOf<Short>()
+        val audioData = java.io.ByteArrayOutputStream()
         val buffer = ShortArray(bufferSize / 2)
-        
+
         while (isRecording) {
             val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
             if (read > 0) {
+                val byteChunk = ByteBuffer.allocate(read * 2)
+                byteChunk.order(ByteOrder.LITTLE_ENDIAN)
                 for (i in 0 until read) {
-                    audioData.add(buffer[i])
+                    byteChunk.putShort(buffer[i])
                 }
+                audioData.write(byteChunk.array())
             }
-            
-            // Update duration
+
             val duration = System.currentTimeMillis() - recordingStartTime
             _recordingDuration.value = duration
-            
-            // Auto-stop at max duration
+
+            // Auto-stop at max duration - just set the flag rather than calling
+            // stopRecording() which would deadlock by joining this thread
             if (duration >= MAX_RECORDING_DURATION_MS) {
-                stopRecording()
+                isRecording = false
                 break
             }
         }
-        
-        // Save to file
-        if (audioData.isNotEmpty()) {
-            saveRecording(audioData.toShortArray())
+
+        val pcmBytes = audioData.toByteArray()
+        if (pcmBytes.isNotEmpty()) {
+            saveRecordingBytes(pcmBytes)
         }
     }
-    
-    private fun saveRecording(audioData: ShortArray) {
+
+    private fun saveRecordingBytes(pcmData: ByteArray) {
         try {
             val outputFile = File(recordingsDir, "reference_${System.currentTimeMillis()}.wav")
-            
-            // Convert to bytes
-            val byteBuffer = ByteBuffer.allocate(audioData.size * 2)
-            byteBuffer.order(ByteOrder.LITTLE_ENDIAN)
-            audioData.forEach { byteBuffer.putShort(it) }
-            
-            val wavData = createWavFile(byteBuffer.array(), SAMPLE_RATE, 1, 16)
+            val wavData = WavUtils.createWavFile(pcmData, SAMPLE_RATE, 1, 16)
             FileOutputStream(outputFile).use { it.write(wavData) }
-            
+
             _recordingState.value = RecordingState.Success(outputFile)
             Log.d(TAG, "Recording saved: ${outputFile.absolutePath}")
-            
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save recording", e)
             _recordingState.value = RecordingState.Error("Failed to save recording")
@@ -213,30 +210,27 @@ class VoiceCloningManager(private val context: Context) {
     suspend fun cloneVoice(audioFile: File): Boolean = withContext(Dispatchers.IO) {
         try {
             _recordingState.value = RecordingState.Processing
-            
+
             val python = Python.getInstance()
             val module = python.getModule("tts_service")
-            
-            // Call Python voice cloning
+
+            // Create a single TTS service instance and reuse it for cloning + saving
+            val service = module.callAttr("create_tts_service")
+
             val success = module.callAttr(
                 "clone_voice_from_audio",
-                module.callAttr("create_tts_service"),
+                service,
                 audioFile.absolutePath
             )?.toBoolean() ?: false
-            
+
             if (success) {
-                // Save voice profile
                 val profileFile = File(voiceProfilesDir, "default_voice.npy")
-                module.callAttr("save_voice_profile", 
-                    module.callAttr("create_tts_service"),
-                    profileFile.absolutePath
-                )
+                module.callAttr("save_voice_profile", service, profileFile.absolutePath)
                 _clonedVoiceAvailable.value = true
             }
-            
+
             _recordingState.value = RecordingState.Idle
             return@withContext success
-            
         } catch (e: Exception) {
             Log.e(TAG, "Voice cloning failed", e)
             _recordingState.value = RecordingState.Error("Voice cloning failed: ${e.message}")
@@ -251,16 +245,8 @@ class VoiceCloningManager(private val context: Context) {
         return try {
             val profileFile = File(voiceProfilesDir, "default_voice.npy")
             if (profileFile.exists()) {
-                val python = Python.getInstance()
-                val module = python.getModule("tts_service")
-                val success = module.callAttr(
-                    "load_voice_profile",
-                    module.callAttr("create_tts_service"),
-                    profileFile.absolutePath
-                )?.toBoolean() ?: false
-                
-                _clonedVoiceAvailable.value = success
-                success
+                _clonedVoiceAvailable.value = true
+                true
             } else {
                 false
             }
@@ -291,38 +277,6 @@ class VoiceCloningManager(private val context: Context) {
         return recordingsDir.listFiles()
             ?.filter { it.name.startsWith("reference_") }
             ?.maxByOrNull { it.lastModified() }
-    }
-    
-    private fun createWavFile(
-        pcmData: ByteArray,
-        sampleRate: Int,
-        channels: Int,
-        bitsPerSample: Int
-    ): ByteArray {
-        val byteRate = sampleRate * channels * bitsPerSample / 8
-        val totalDataLen = pcmData.size + 36
-        val blockAlign = channels * bitsPerSample / 8
-        
-        val buffer = ByteBuffer.allocate(pcmData.size + 44)
-        buffer.order(ByteOrder.LITTLE_ENDIAN)
-        
-        // WAV header
-        buffer.put("RIFF".toByteArray())
-        buffer.putInt(totalDataLen)
-        buffer.put("WAVE".toByteArray())
-        buffer.put("fmt ".toByteArray())
-        buffer.putInt(16) // Subchunk1Size
-        buffer.putShort(1) // AudioFormat (PCM)
-        buffer.putShort(channels.toShort())
-        buffer.putInt(sampleRate)
-        buffer.putInt(byteRate)
-        buffer.putShort(blockAlign.toShort())
-        buffer.putShort(bitsPerSample.toShort())
-        buffer.put("data".toByteArray())
-        buffer.putInt(pcmData.size)
-        buffer.put(pcmData)
-        
-        return buffer.array()
     }
     
     fun release() {

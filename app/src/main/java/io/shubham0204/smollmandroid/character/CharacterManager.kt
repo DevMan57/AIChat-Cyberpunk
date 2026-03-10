@@ -24,13 +24,13 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import io.shubham0204.smollmandroid.data.AppRoomDatabase
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.koin.core.annotation.Single
@@ -58,9 +58,13 @@ class CharacterManager(private val context: Context) {
     private val _characters = MutableStateFlow<List<Character>>(emptyList())
     val characters: StateFlow<List<Character>> = _characters
     
+    private val scope = CoroutineScope(Dispatchers.IO)
+
     init {
-        loadCharacters()
-        loadCurrentCharacter()
+        scope.launch {
+            loadCharacters()
+            loadCurrentCharacter()
+        }
     }
     
     /**
@@ -202,39 +206,35 @@ class CharacterManager(private val context: Context) {
         return addCharacter(duplicate)
     }
     
-    private fun loadCharacters() {
-        runBlocking {
-            try {
-                val charactersJson = dataStore.data.map { prefs ->
-                    prefs[CHARACTERS_LIST] ?: "[]"
-                }.first()
-                
-                val loadedCharacters = json.decodeFromString<List<Character>>(charactersJson)
-                _characters.value = loadedCharacters
-                Log.d(TAG, "Loaded ${loadedCharacters.size} custom characters")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error loading characters", e)
-                _characters.value = emptyList()
-            }
+    private suspend fun loadCharacters() {
+        try {
+            val charactersJson = dataStore.data.map { prefs ->
+                prefs[CHARACTERS_LIST] ?: "[]"
+            }.first()
+
+            val loadedCharacters = json.decodeFromString<List<Character>>(charactersJson)
+            _characters.value = loadedCharacters
+            Log.d(TAG, "Loaded ${loadedCharacters.size} custom characters")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading characters", e)
+            _characters.value = emptyList()
         }
     }
-    
-    private fun loadCurrentCharacter() {
-        runBlocking {
-            try {
-                val currentId = dataStore.data.map { prefs ->
-                    prefs[CURRENT_CHARACTER_ID] ?: -1L
-                }.first()
-                
-                val character = getAllCharacters().find { it.id == currentId }
-                    ?: Character.createAva()
-                
-                _currentCharacter.value = character
-                Log.d(TAG, "Loaded current character: ${character.name}")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error loading current character", e)
-                _currentCharacter.value = Character.createAva()
-            }
+
+    private suspend fun loadCurrentCharacter() {
+        try {
+            val currentId = dataStore.data.map { prefs ->
+                prefs[CURRENT_CHARACTER_ID] ?: -1L
+            }.first()
+
+            val character = getAllCharacters().find { it.id == currentId }
+                ?: Character.createAva()
+
+            _currentCharacter.value = character
+            Log.d(TAG, "Loaded current character: ${character.name}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading current character", e)
+            _currentCharacter.value = Character.createAva()
         }
     }
     

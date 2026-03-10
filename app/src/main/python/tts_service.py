@@ -30,9 +30,9 @@ class TTSService:
         """Initialize TTS engine"""
         try:
             if SHERPA_AVAILABLE and model_dir:
-                # Initialize sherpa-onnx TTS
                 self.tts_engine = self._init_sherpa_tts(model_dir)
-            return True
+                return True
+            return False
         except Exception as e:
             print(f"TTS initialization error: {e}")
             return False
@@ -140,9 +140,9 @@ class TTSService:
     def load_voice_profile(self, profile_path):
         """Load voice embedding from file"""
         try:
-            self.voice_embedding = np.load(profile_path)
+            self.voice_embedding = np.load(profile_path, allow_pickle=False)
             return True
-        except:
+        except Exception:
             return False
 
 
@@ -150,8 +150,8 @@ class TTSService:
 def create_tts_service(model_dir=None):
     """Create and initialize TTS service"""
     service = TTSService()
-    success = service.initialize(model_dir)
-    return service if success else None
+    service.initialize(model_dir)
+    return service
 
 def synthesize_text(service, text, speaker_id=0, speed=1.0):
     """Synthesize text to speech"""

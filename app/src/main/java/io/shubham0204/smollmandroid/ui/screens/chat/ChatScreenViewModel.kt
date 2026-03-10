@@ -495,7 +495,19 @@ class ChatScreenViewModel(
                     event.onLineComplete(transcription)
                 }
                 if (error is AudioTranscriptionService.Error.AudioRecordingPermissionNotGranted) {
-
+                    _uiState.update {
+                        it.copy(
+                            audioTranscriptionUIState = AudioTranscriptionUIState(
+                                isRecording = false,
+                                isAvailable = false
+                            )
+                        )
+                    }
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.dialog_err_title),
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
 
@@ -746,7 +758,8 @@ class ChatScreenViewModel(
         val memoryInfo = MemoryInfo()
         activityManager.getMemoryInfo(memoryInfo)
         val totalMemory = (memoryInfo.totalMem) / 1024.0.pow(3.0)
-        val usedMemory = (memoryInfo.availMem) / 1024.0.pow(3.0)
+        val availableMemory = (memoryInfo.availMem) / 1024.0.pow(3.0)
+        val usedMemory = totalMemory - availableMemory
         return Pair(usedMemory.toFloat(), totalMemory.toFloat())
     }
 }
