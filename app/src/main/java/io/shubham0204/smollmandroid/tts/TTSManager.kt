@@ -125,22 +125,32 @@ class TTSManager(private val context: Context) {
 
             val numThreads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4)
 
-            fun createSession(fileName: String): OrtSession {
+            fun createSession(fileName: String, useNnapi: Boolean = false): OrtSession {
                 val opts = OrtSession.SessionOptions()
                 opts.setIntraOpNumThreads(numThreads)
                 opts.setInterOpNumThreads(1)
                 opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+                // Try NNAPI (delegates to Qualcomm HTP/NPU on Snapdragon)
+                if (useNnapi) {
+                    try {
+                        opts.addNnapi()
+                        Log.d(TAG, "NNAPI enabled for $fileName")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "NNAPI not available for $fileName, using CPU", e)
+                    }
+                }
                 return env.createSession(
                     File(modelDir, fileName).absolutePath,
                     opts
                 )
             }
 
-            textConditionerSession = createSession("text_conditioner.onnx")
-            flowLmMainSession = createSession("flow_lm_main_int8.onnx")
-            flowLmFlowSession = createSession("flow_lm_flow_int8.onnx")
-            mimiDecoderSession = createSession("mimi_decoder_int8.onnx")
-            mimiEncoderSession = createSession("mimi_encoder.onnx")
+            // Stateless models benefit from NNAPI — stateful models (KV cache) stay on CPU
+            textConditionerSession = createSession("text_conditioner.onnx", useNnapi = true)
+            flowLmMainSession = createSession("flow_lm_main_int8.onnx", useNnapi = false)
+            flowLmFlowSession = createSession("flow_lm_flow_int8.onnx", useNnapi = true)
+            mimiDecoderSession = createSession("mimi_decoder_int8.onnx", useNnapi = false)
+            mimiEncoderSession = createSession("mimi_encoder.onnx", useNnapi = true)
 
             tokenizer = SentencePieceTokenizer.load(File(modelDir, "tokenizer.model"))
 

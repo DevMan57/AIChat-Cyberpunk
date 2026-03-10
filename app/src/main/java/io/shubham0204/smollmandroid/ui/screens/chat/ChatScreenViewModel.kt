@@ -35,6 +35,7 @@ import io.shubham0204.smollmandroid.data.LLMModel
 import io.shubham0204.smollmandroid.data.SharedPrefStore
 import io.shubham0204.smollmandroid.data.Task
 import io.shubham0204.smollmandroid.llm.ModelsRepository
+import io.shubham0204.smollmandroid.llm.RemoteLLMManager
 import io.shubham0204.smollmandroid.llm.SmolLMManager
 import io.shubham0204.smollmandroid.llm.speech2text.AudioTranscriptionService
 import io.shubham0204.smollmandroid.llm.speech2text.SttEngine
@@ -160,6 +161,7 @@ class ChatScreenViewModel(
     val appDB: AppDB,
     val modelsRepository: ModelsRepository,
     val smolLMManager: SmolLMManager,
+    val remoteLLMManager: RemoteLLMManager,
     val audioTranscriptionService: AudioTranscriptionService,
     val mdRenderer: MDRenderer,
     val sharedPrefStore: SharedPrefStore
@@ -196,6 +198,24 @@ class ChatScreenViewModel(
      */
     fun loadModel(onComplete: (ModelLoadingState) -> Unit = {}) {
         val chat = _uiState.value.chat
+
+        // Remote mode: initialize remote manager and skip local model loading
+        if (remoteLLMManager.isEnabled.get()) {
+            _uiState.update { it.copy(modelLoadingState = ModelLoadingState.IN_PROGRESS) }
+            remoteLLMManager.load(
+                chat,
+                onSuccess = {
+                    _uiState.update { it.copy(modelLoadingState = ModelLoadingState.SUCCESS) }
+                    onComplete(ModelLoadingState.SUCCESS)
+                },
+                onError = { e ->
+                    _uiState.update { it.copy(modelLoadingState = ModelLoadingState.FAILURE) }
+                    onComplete(ModelLoadingState.FAILURE)
+                }
+            )
+            return
+        }
+
         val model = modelsRepository.getModelFromId(chat.llmModelId)
         if (chat.llmModelId == -1L) {
             _uiState.update { it.copy(showSelectModelListDialog = true) }
@@ -252,14 +272,23 @@ class ChatScreenViewModel(
     }
 
     /** Clears the resources occupied by the model only if the inference is not in progress. */
-    fun unloadModel(): Boolean =
-        if (!smolLMManager.isInferenceOn) {
+    fun unloadModel(): Boolean {
+        if (remoteLLMManager.isEnabled.get()) {
+            if (!remoteLLMManager.isInferenceOn) {
+                remoteLLMManager.unload()
+                _uiState.update { it.copy(modelLoadingState = ModelLoadingState.NOT_LOADED) }
+                return true
+            }
+            return false
+        }
+        return if (!smolLMManager.isInferenceOn) {
             smolLMManager.unload()
             _uiState.update { it.copy(modelLoadingState = ModelLoadingState.NOT_LOADED) }
             true
         } else {
             false
         }
+    }
 
     @SuppressLint("StringFormatMatches")
     fun onEvent(event: ChatScreenUIEvent) {
@@ -730,57 +759,78 @@ class ChatScreenViewModel(
             appDB.addUserMessage(chat.id, query)
         }
         _uiState.update { it.copy(isGeneratingResponse = true, renderedPartialResponse = null) }
-        smolLMManager.getResponse(
-            query,
-            responseTransform = {
-                // Replace <think> tags with <blockquote> tags
-                // to get a neat Markdown rendering
-                findThinkTagRegex.replace(it) { matchResult ->
-                    "<blockquote><i><h6>${matchResult.groupValues[1].trim()}</i></h6></blockquote>"
-                }
-            },
-            onPartialResponseGenerated = { resp ->
-                _uiState.update { it.copy(renderedPartialResponse = mdRenderer.render(resp)) }
-            },
-            onSuccess = { response ->
-                val updatedChat = chat.copy(contextSizeConsumed = response.contextLengthUsed)
-                _uiState.update {
-                    it.copy(
-                        chat = updatedChat,
-                        isGeneratingResponse = false,
-                        responseGenerationsSpeed = response.generationSpeed,
-                        responseGenerationTimeSecs = response.generationTimeSecs,
-                        memoryUsage =
-                            if (it.memoryUsage != null) {
-                                getCurrentMemoryUsage()
-                            } else {
-                                null
-                            },
-                    )
-                }
-                appDB.updateChat(updatedChat)
-            },
-            onCancelled = {
-                // ignore CancellationException, as it was called because
-                // `responseGenerationJob` was cancelled in the `stopGeneration` method
-            },
-            onError = { exception ->
-                _uiState.update { it.copy(isGeneratingResponse = false) }
-                createAlertDialog(
-                    dialogTitle = "An error occurred",
-                    dialogText =
-                        "The app is unable to process the query. The error message is: ${exception.message}",
-                    dialogPositiveButtonText = "Change model",
-                    onPositiveButtonClick = {},
-                    dialogNegativeButtonText = "",
-                    onNegativeButtonClick = {},
+
+        val responseTransform: (String) -> String = {
+            // Replace <think> tags with <blockquote> tags
+            // to get a neat Markdown rendering
+            findThinkTagRegex.replace(it) { matchResult ->
+                "<blockquote><i><h6>${matchResult.groupValues[1].trim()}</i></h6></blockquote>"
+            }
+        }
+        val onPartialResponse: (String) -> Unit = { resp ->
+            _uiState.update { it.copy(renderedPartialResponse = mdRenderer.render(resp)) }
+        }
+        val onSuccess: (SmolLMManager.SmolLMResponse) -> Unit = { response ->
+            val updatedChat = chat.copy(contextSizeConsumed = response.contextLengthUsed)
+            _uiState.update {
+                it.copy(
+                    chat = updatedChat,
+                    isGeneratingResponse = false,
+                    responseGenerationsSpeed = response.generationSpeed,
+                    responseGenerationTimeSecs = response.generationTimeSecs,
+                    memoryUsage =
+                        if (it.memoryUsage != null) {
+                            getCurrentMemoryUsage()
+                        } else {
+                            null
+                        },
                 )
-            },
-        )
+            }
+            appDB.updateChat(updatedChat)
+        }
+        val onCancelled: () -> Unit = {}
+        val onError: (Exception) -> Unit = { exception ->
+            _uiState.update { it.copy(isGeneratingResponse = false) }
+            createAlertDialog(
+                dialogTitle = "An error occurred",
+                dialogText =
+                    "The app is unable to process the query. The error message is: ${exception.message}",
+                dialogPositiveButtonText = "Change model",
+                onPositiveButtonClick = {},
+                dialogNegativeButtonText = "",
+                onNegativeButtonClick = {},
+            )
+        }
+
+        // Route to remote or local inference
+        if (remoteLLMManager.isEnabled.get()) {
+            remoteLLMManager.getResponse(
+                query = query,
+                chat = chat,
+                responseTransform = responseTransform,
+                onPartialResponseGenerated = onPartialResponse,
+                onSuccess = onSuccess,
+                onCancelled = onCancelled,
+                onError = onError,
+            )
+        } else {
+            smolLMManager.getResponse(
+                query = query,
+                responseTransform = responseTransform,
+                onPartialResponseGenerated = onPartialResponse,
+                onSuccess = onSuccess,
+                onCancelled = onCancelled,
+                onError = onError,
+            )
+        }
     }
 
     private fun stopGeneration() {
-        smolLMManager.stopResponseGeneration()
+        if (remoteLLMManager.isEnabled.get()) {
+            remoteLLMManager.stopResponseGeneration()
+        } else {
+            smolLMManager.stopResponseGeneration()
+        }
         _uiState.update { it.copy(isGeneratingResponse = false, renderedPartialResponse = null) }
     }
 
