@@ -81,28 +81,28 @@ fun getPopularModel(index: Int?): LLMModel? = if (index != null) popularModelsLi
 private val popularModelsList =
     listOf(
         LLMModel(
-            name = "SmolLM2 360M Instruct GGUF",
+            name = "Qwen 3.5 4B Heretic Q4_K_M (Recommended)",
             url =
-                "https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct-GGUF/resolve/main/smollm2-360m-instruct-q8_0.gguf",
+                "https://huggingface.co/mradermacher/Qwen3.5-4B-heretic-GGUF/resolve/main/Qwen3.5-4B-heretic.Q4_K_M.gguf",
         ),
         LLMModel(
-            name = "SmolLM2 1.7B Instruct GGUF",
+            name = "Qwen2.5 3B Q4_K_M Instruct GGUF",
+            url =
+                "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
+        ),
+        LLMModel(
+            name = "Qwen2.5 1.5B Q4_K_M Instruct GGUF",
+            url =
+                "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+        ),
+        LLMModel(
+            name = "SmolLM2 1.7B Instruct Q4_K_M GGUF",
             url =
                 "https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct-GGUF/resolve/main/smollm2-1.7b-instruct-q4_k_m.gguf",
         ),
         LLMModel(
-            name = "Qwen2.5 1.5B Q8 Instruct GGUF",
+            name = "Qwen2.5 Coder 3B Q4_K_M Instruct GGUF",
             url =
-                "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q8_0.gguf",
-        ),
-        LLMModel(
-            name = "Qwen2.5 3B Q5_K_M Instruct GGUF",
-            url =
-                "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q5_k_m.gguf",
-        ),
-        LLMModel(
-            name = "Qwen2.5 Coder 3B Instruct Q5 GGUF",
-            url =
-                "https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/qwen2.5-coder-3b-instruct-q5_0.gguf",
+                "https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/qwen2.5-coder-3b-instruct-q4_k_m.gguf",
         ),
     )
