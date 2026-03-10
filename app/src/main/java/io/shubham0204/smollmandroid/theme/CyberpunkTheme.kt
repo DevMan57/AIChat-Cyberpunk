@@ -121,6 +121,7 @@ object CyberpunkColors {
     // UI Elements - Lightsaber themed
     val borderGreen = LightsaberColors.green.copy(alpha = 0.5f)
     val borderPurple = LightsaberColors.purple.copy(alpha = 0.5f)
+    val borderCyan = Color(0xFF00CCFF).copy(alpha = 0.4f)
     val surfaceGlowGreen = LightsaberColors.green.copy(alpha = 0.1f)
     val surfaceGlowPurple = LightsaberColors.purple.copy(alpha = 0.1f)
 }

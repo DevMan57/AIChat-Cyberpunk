@@ -373,7 +373,7 @@ private fun AvatarSelector(
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            AvatarType.values().forEach { avatarType ->
+            AvatarType.entries.forEach { avatarType ->
                 val isSelected = avatarType == selectedAvatar
                 
                 Column(

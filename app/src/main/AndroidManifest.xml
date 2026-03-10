@@ -78,10 +78,17 @@
             android:label="Manage Tasks" />
             
         <!-- Voice Cloning Activity -->
-        <activity 
+        <activity
             android:name=".ui.screens.voice.VoiceCloningActivity"
             android:exported="false"
             android:label="Voice Cloning"
+            android:theme="@style/Theme.SmolLMAndroid" />
+
+        <!-- TTS Model Management Activity -->
+        <activity
+            android:name=".ui.screens.manage_tts.ManageTTSActivity"
+            android:exported="false"
+            android:label="Manage TTS"
             android:theme="@style/Theme.SmolLMAndroid" />
             
     </application>

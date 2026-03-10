@@ -13,8 +13,6 @@ pluginManagement {
         }
         mavenCentral()
         gradlePluginPortal()
-        // Chaquopy plugin repository
-        maven { url = URI("https://chaquo.com/maven") }
     }
 }
 plugins {
@@ -27,8 +25,6 @@ dependencyResolutionManagement {
         mavenCentral()
         maven { url = URI("https://jitpack.io") }
         maven { url = URI("https://oss.sonatype.org/content/repositories/snapshots/") }
-        // Chaquopy repository
-        maven { url = URI("https://chaquo.com/maven") }
     }
 }
 

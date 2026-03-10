@@ -37,37 +37,44 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.SettingsSystemDaydream
-import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.shubham0204.smollmandroid.llm.RemoteLLMManager
 import io.shubham0204.smollmandroid.theme.CyberpunkColors
 import io.shubham0204.smollmandroid.theme.neonBorder
 import io.shubham0204.smollmandroid.ui.theme.AppThemeMode
 import io.shubham0204.smollmandroid.ui.theme.ThemeManager
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 /**
@@ -78,7 +85,8 @@ import org.koin.compose.koinInject
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
-    themeManager: ThemeManager = koinInject()
+    themeManager: ThemeManager = koinInject(),
+    remoteLLMManager: RemoteLLMManager = koinInject()
 ) {
     val currentThemeMode by themeManager.currentThemeMode.collectAsStateWithLifecycle()
     
@@ -133,7 +141,14 @@ fun SettingsScreen(
             )
             
             Spacer(modifier = Modifier.height(8.dp))
-            
+
+            // Remote LLM Section (LM Studio Link)
+            SettingsSectionTitle("Remote LLM (LM Studio Link)")
+
+            RemoteLLMSettings(remoteLLMManager = remoteLLMManager)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             // Info Section
             SettingsSectionTitle("About")
             
@@ -331,7 +346,7 @@ private fun ThemePreview(
                     ColorPreviewDot(CyberpunkColors.lightsaberGreen)
                     ColorPreviewDot(CyberpunkColors.lightsaberPurple)
                     ColorPreviewDot(CyberpunkColors.lightsaberPurple)
-                    ColorPreviewDot(CyberpunkColors.neonGreen)
+                    ColorPreviewDot(CyberpunkColors.lightsaberGreen)
                 } else {
                     // Dark theme colors
                     ColorPreviewDot(Color(0xFF5B8CFF))
@@ -412,4 +427,191 @@ private fun ColorPreviewDot(color: Color) {
             .background(color, CircleShape)
             .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
     )
+}
+
+@Composable
+private fun RemoteLLMSettings(remoteLLMManager: RemoteLLMManager) {
+    val scope = rememberCoroutineScope()
+    var isEnabled by remember { mutableStateOf(remoteLLMManager.isEnabled.get()) }
+    var serverUrl by remember { mutableStateOf(remoteLLMManager.getServerUrl()) }
+    var modelName by remember { mutableStateOf(remoteLLMManager.getModelName()) }
+    var apiKey by remember { mutableStateOf(remoteLLMManager.getApiKey()) }
+    var testResult by remember { mutableStateOf<String?>(null) }
+    var isTesting by remember { mutableStateOf(false) }
+
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = CyberpunkColors.textPrimary,
+        unfocusedTextColor = CyberpunkColors.textPrimary,
+        focusedBorderColor = CyberpunkColors.lightsaberGreen,
+        unfocusedBorderColor = CyberpunkColors.borderCyan.copy(alpha = 0.5f),
+        focusedLabelColor = CyberpunkColors.lightsaberGreen,
+        unfocusedLabelColor = CyberpunkColors.textSecondary,
+        cursorColor = CyberpunkColors.lightsaberGreen,
+    )
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = CyberpunkColors.backgroundCard
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .neonBorder(CyberpunkColors.borderCyan.copy(alpha = 0.3f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Enable toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        "Enable Remote Inference",
+                        color = CyberpunkColors.textPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        "Connect to LM Studio or any OpenAI-compatible server",
+                        color = CyberpunkColors.textSecondary,
+                        fontSize = 12.sp
+                    )
+                }
+                Switch(
+                    checked = isEnabled,
+                    onCheckedChange = { enabled ->
+                        isEnabled = enabled
+                        remoteLLMManager.setEnabled(enabled)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = CyberpunkColors.lightsaberGreen,
+                        checkedTrackColor = CyberpunkColors.lightsaberGreen.copy(alpha = 0.3f),
+                        uncheckedThumbColor = CyberpunkColors.textMuted,
+                        uncheckedTrackColor = CyberpunkColors.backgroundSecondary,
+                    )
+                )
+            }
+
+            // Server URL
+            OutlinedTextField(
+                value = serverUrl,
+                onValueChange = {
+                    serverUrl = it
+                    remoteLLMManager.setServerUrl(it)
+                },
+                label = { Text("Server URL") },
+                placeholder = { Text("http://192.168.1.100:1234", color = CyberpunkColors.textMuted) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = textFieldColors,
+                enabled = isEnabled
+            )
+
+            // Model name
+            OutlinedTextField(
+                value = modelName,
+                onValueChange = {
+                    modelName = it
+                    remoteLLMManager.setModelName(it)
+                },
+                label = { Text("Model Name") },
+                placeholder = { Text("Leave blank to auto-detect", color = CyberpunkColors.textMuted) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = textFieldColors,
+                enabled = isEnabled
+            )
+
+            // API Key
+            OutlinedTextField(
+                value = apiKey,
+                onValueChange = {
+                    apiKey = it
+                    remoteLLMManager.setApiKey(it)
+                },
+                label = { Text("API Key (optional)") },
+                placeholder = { Text("Bearer token", color = CyberpunkColors.textMuted) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = textFieldColors,
+                visualTransformation = if (apiKey.isNotEmpty()) PasswordVisualTransformation() else VisualTransformation.None,
+                enabled = isEnabled
+            )
+
+            // Test connection button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Button(
+                    onClick = {
+                        isTesting = true
+                        testResult = null
+                        scope.launch {
+                            val result = remoteLLMManager.testConnection()
+                            result.onSuccess { models ->
+                                testResult = if (models.isEmpty()) {
+                                    "Connected (no models listed)"
+                                } else {
+                                    "Connected - Models: ${models.joinToString(", ")}"
+                                }
+                                // Auto-fill model name if blank
+                                if (modelName.isBlank() && models.isNotEmpty()) {
+                                    modelName = models.first()
+                                    remoteLLMManager.setModelName(modelName)
+                                }
+                            }
+                            result.onFailure { e ->
+                                testResult = "Failed: ${e.message}"
+                            }
+                            isTesting = false
+                        }
+                    },
+                    enabled = isEnabled && !isTesting,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CyberpunkColors.lightsaberGreen.copy(alpha = 0.2f),
+                        contentColor = CyberpunkColors.lightsaberGreen,
+                        disabledContainerColor = CyberpunkColors.backgroundSecondary,
+                        disabledContentColor = CyberpunkColors.textMuted,
+                    ),
+                    modifier = Modifier.neonBorder(
+                        if (isEnabled) CyberpunkColors.lightsaberGreen.copy(alpha = 0.5f)
+                        else Color.Transparent
+                    )
+                ) {
+                    if (isTesting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = CyberpunkColors.lightsaberGreen,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text("Test Connection")
+                }
+            }
+
+            // Test result
+            if (testResult != null) {
+                val isSuccess = testResult!!.startsWith("Connected")
+                Text(
+                    testResult!!,
+                    color = if (isSuccess) CyberpunkColors.lightsaberGreen else Color(0xFFFF4444),
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (isSuccess) CyberpunkColors.lightsaberGreen.copy(alpha = 0.1f)
+                            else Color(0xFFFF4444).copy(alpha = 0.1f),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(8.dp)
+                )
+            }
+        }
+    }
 }

@@ -3,7 +3,6 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.devtools.ksp")
-    id("com.chaquo.python") version "15.0.1"
     kotlin("plugin.serialization") version "2.1.0"
 }
 
@@ -21,7 +20,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
-        // Chaquopy Python configuration
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
@@ -82,24 +80,6 @@ android {
         create("cleanedAnnotations")
         implementation {
             exclude(group = "org.jetbrains", module = "annotations")
-        }
-    }
-}
-
-// Chaquopy Python configuration
-chaquopy {
-    defaultConfig {
-        version = "3.10"
-        buildPython("/usr/bin/python3")
-        pip {
-            install("numpy==1.24.4")
-            install("wave")
-        }
-    }
-    productFlavors { }
-    sourceSets {
-        getByName("main") {
-            srcDir("src/main/python")
         }
     }
 }
@@ -168,8 +148,8 @@ dependencies {
     // Audio recording and playback for voice cloning
     implementation("androidx.media:media:1.7.0")
     
-    // Chaquopy Python integration
-    implementation("com.chaquo.python.runtime:chaquopy-java:15.0.1")
+    // ONNX Runtime for on-device TTS (PocketTTS engine)
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.21.0")
 
     implementation("com.github.khushpanchal:Ketch:2.0.5")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
