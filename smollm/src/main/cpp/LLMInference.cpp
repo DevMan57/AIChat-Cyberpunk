@@ -39,9 +39,16 @@ LLMInference::loadModel(const char *model_path, float minP, float temperature, b
     // create an instance of llama_context
     llama_context_params ctx_params = llama_context_default_params();
     ctx_params.n_ctx = contextSize;
-    ctx_params.n_batch = contextSize;
+    // n_batch: max tokens per prompt processing batch. 512 is optimal for
+    // Snapdragon 8 Gen 3 - balances memory use vs throughput. Setting this
+    // to contextSize wastes memory and doesn't improve speed.
+    ctx_params.n_batch = 512;
     ctx_params.n_threads = nThreads;
-    ctx_params.no_perf = true; // disable performance metrics
+    // Use more threads for prompt processing (batch decode) since it's
+    // embarrassingly parallel. Token generation uses n_threads.
+    ctx_params.n_threads_batch = nThreads + 2;
+    ctx_params.flash_attn = true;
+    ctx_params.no_perf = true;
     _ctx = llama_init_from_model(_model, ctx_params);
     if (!_ctx) {
         LOGe("llama_new_context_with_model() returned null)");

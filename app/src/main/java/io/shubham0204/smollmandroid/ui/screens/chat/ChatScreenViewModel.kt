@@ -37,6 +37,7 @@ import io.shubham0204.smollmandroid.data.Task
 import io.shubham0204.smollmandroid.llm.ModelsRepository
 import io.shubham0204.smollmandroid.llm.SmolLMManager
 import io.shubham0204.smollmandroid.llm.speech2text.AudioTranscriptionService
+import io.shubham0204.smollmandroid.llm.speech2text.SttEngine
 import io.shubham0204.smollmandroid.ui.components.createAlertDialog
 import io.shubham0204.smollmandroid.ui.screens.manage_asr.SETTING_DEF_VALUE_SPEECH2TEXT_CURR_MODEL_NAME
 import io.shubham0204.smollmandroid.ui.screens.manage_asr.SETTING_DEF_VALUE_SPEECH2_TEXT_ENABLED
@@ -475,39 +476,93 @@ class ChatScreenViewModel(
                         )
                     )
                 }
+
                 val asrModelName = sharedPrefStore.get(
                     SETTING_KEY_SPEECH2TEXT_CURR_MODEL_NAME,
                     SETTING_DEF_VALUE_SPEECH2TEXT_CURR_MODEL_NAME
                 )
-                val asrModel = availableASRModels.first {
-                    it.name == asrModelName
-                }
-                val error =
+
+                // Use native STT if no Moonshine model is configured, or if native is available
+                // as a zero-download fallback
+                val useNativeStt = asrModelName.isBlank() && audioTranscriptionService.isNativeSttAvailable()
+
+                val error = if (useNativeStt) {
+                    audioTranscriptionService.startNativeTranscription(
+                        onResult = { transcription ->
+                            _uiState.update {
+                                it.copy(
+                                    audioTranscriptionUIState = AudioTranscriptionUIState(
+                                        false,
+                                        isAvailable = true
+                                    )
+                                )
+                            }
+                            event.onLineComplete(transcription)
+                        },
+                        onError = { errorCode ->
+                            _uiState.update {
+                                it.copy(
+                                    audioTranscriptionUIState = AudioTranscriptionUIState(
+                                        isRecording = false,
+                                        isAvailable = true
+                                    )
+                                )
+                            }
+                            Log.e(LOGTAG, "Native STT error code: $errorCode")
+                        }
+                    )
+                } else if (asrModelName.isNotBlank()) {
+                    val asrModel = availableASRModels.first { it.name == asrModelName }
                     audioTranscriptionService.startTranscription(asrModel) { transcription ->
-                    _uiState.update {
-                        it.copy(
-                            audioTranscriptionUIState = AudioTranscriptionUIState(
-                                false,
-                                isAvailable = true
+                        _uiState.update {
+                            it.copy(
+                                audioTranscriptionUIState = AudioTranscriptionUIState(
+                                    false,
+                                    isAvailable = true
+                                )
                             )
-                        )
+                        }
+                        event.onLineComplete(transcription)
                     }
-                    event.onLineComplete(transcription)
+                } else {
+                    // No Moonshine model and no native STT available
+                    AudioTranscriptionService.Error.NativeSttNotAvailable(
+                        "No speech recognition available. Download a model or enable native STT."
+                    )
                 }
-                if (error is AudioTranscriptionService.Error.AudioRecordingPermissionNotGranted) {
-                    _uiState.update {
-                        it.copy(
-                            audioTranscriptionUIState = AudioTranscriptionUIState(
-                                isRecording = false,
-                                isAvailable = false
+
+                when (error) {
+                    is AudioTranscriptionService.Error.AudioRecordingPermissionNotGranted -> {
+                        _uiState.update {
+                            it.copy(
+                                audioTranscriptionUIState = AudioTranscriptionUIState(
+                                    isRecording = false,
+                                    isAvailable = false
+                                )
                             )
-                        )
+                        }
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.dialog_err_title),
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.dialog_err_title),
-                        Toast.LENGTH_LONG
-                    ).show()
+                    is AudioTranscriptionService.Error.NativeSttNotAvailable -> {
+                        _uiState.update {
+                            it.copy(
+                                audioTranscriptionUIState = AudioTranscriptionUIState(
+                                    isRecording = false,
+                                    isAvailable = false
+                                )
+                            )
+                        }
+                        Toast.makeText(
+                            context,
+                            "No speech recognition available. Configure a model in ASR settings.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    null -> { /* Success, already recording */ }
                 }
             }
 
@@ -532,8 +587,11 @@ class ChatScreenViewModel(
             SETTING_KEY_SPEECH2TEXT_ENABLED,
             SETTING_DEF_VALUE_SPEECH2_TEXT_ENABLED
         )
+        // Also enable STT if native (built-in) speech recognition is available,
+        // even without a downloaded Moonshine model
+        val isNativeSttAvailable = audioTranscriptionService.isNativeSttAvailable()
         val audioTranscriptionUIState = AudioTranscriptionUIState(
-            isAvailable = isSpeech2TextEnabled
+            isAvailable = isSpeech2TextEnabled || isNativeSttAvailable
         )
 
         return ChatScreenUIState(

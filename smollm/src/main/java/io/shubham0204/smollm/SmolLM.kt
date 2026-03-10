@@ -37,6 +37,7 @@ class SmolLM {
             val hasFp16 = cpuFeatures.contains("fp16") || cpuFeatures.contains("fphp")
             val hasDotProd = cpuFeatures.contains("dotprod") || cpuFeatures.contains("asimddp")
             val hasSve = cpuFeatures.contains("sve")
+            val hasSve2 = cpuFeatures.contains("sve2")
             val hasI8mm = cpuFeatures.contains("i8mm")
             val isAtLeastArmV82 =
                 cpuFeatures.contains("asimd") &&
@@ -48,6 +49,7 @@ class SmolLM {
             Log.d(logTag, "- hasFp16: $hasFp16")
             Log.d(logTag, "- hasDotProd: $hasDotProd")
             Log.d(logTag, "- hasSve: $hasSve")
+            Log.d(logTag, "- hasSve2: $hasSve2")
             Log.d(logTag, "- hasI8mm: $hasI8mm")
             Log.d(logTag, "- isAtLeastArmV82: $isAtLeastArmV82")
             Log.d(logTag, "- isAtLeastArmV84: $isAtLeastArmV84")
@@ -61,7 +63,11 @@ class SmolLM {
 
             if (!isEmulated) {
                 if (supportsArm64V8a()) {
-                    if (isAtLeastArmV84 && hasSve && hasI8mm && hasFp16 && hasDotProd) {
+                    if (hasSve2 && hasI8mm && hasFp16 && hasDotProd) {
+                        // ARMv9 Cortex-X4 (Snapdragon 8 Gen 3 prime core)
+                        Log.d(logTag, "Loading libsmollm_v9_fp16_dotprod_i8mm_sve2.so")
+                        System.loadLibrary("smollm_v9_fp16_dotprod_i8mm_sve2")
+                    } else if (isAtLeastArmV84 && hasSve && hasI8mm && hasFp16 && hasDotProd) {
                         Log.d(logTag, "Loading libsmollm_v8_4_fp16_dotprod_i8mm_sve.so")
                         System.loadLibrary("smollm_v8_4_fp16_dotprod_i8mm_sve")
                     } else if (isAtLeastArmV84 && hasSve && hasFp16 && hasDotProd) {
@@ -158,7 +164,11 @@ class SmolLM {
         val storeChats: Boolean = true,
         val contextSize: Long? = null,
         val chatTemplate: String? = null,
-        val numThreads: Int = 4,
+        // Auto-detect optimal thread count based on available cores.
+        // Snapdragon 8 Gen 3 (S24 Ultra): 1 prime + 3 perf + 4 eff = 8 cores.
+        // Use up to 6 threads (prime + perf + 2 eff) to balance throughput
+        // vs thermal throttling. Clamped to [4,6] for safety on other devices.
+        val numThreads: Int = Runtime.getRuntime().availableProcessors().coerceIn(4, 6),
         val useMmap: Boolean = true,
         val useMlock: Boolean = false,
     )

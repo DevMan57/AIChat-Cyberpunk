@@ -164,11 +164,14 @@ if (${ANDROID_ABI} STREQUAL "arm64-v8a")
     build_library_arm64("smollm_v8_2_fp16" "-march=armv8.2-a+fp16")
     build_library_arm64("smollm_v8_2_fp16_dotprod" "-march=armv8.2-a+fp16+dotprod")
 
-    # Targets for Arm-v8.4a - optimized for Snapdragon 8 Gen 3
+    # Targets for Arm-v8.4a - optimized for Snapdragon 8 Gen 3 (S24 Ultra)
     build_library_arm64("smollm_v8_4_fp16_dotprod" "-march=armv8.4-a+fp16+dotprod")
     build_library_arm64("smollm_v8_4_fp16_dotprod_sve" "-march=armv8.4-a+fp16+dotprod+sve")
     build_library_arm64("smollm_v8_4_fp16_dotprod_i8mm" "-march=armv8.4-a+fp16+dotprod+i8mm")
     build_library_arm64("smollm_v8_4_fp16_dotprod_i8mm_sve" "-march=armv8.4-a+fp16+dotprod+i8mm+sve")
+
+    # Target for ARMv9 Cortex-X4 (Snapdragon 8 Gen 3 prime core) with SVE2
+    build_library_arm64("smollm_v9_fp16_dotprod_i8mm_sve2" "-march=armv9-a+fp16+dotprod+i8mm+sve2")
 endif()
 
 # library target for GGUFReader
